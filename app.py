@@ -717,7 +717,7 @@ for k,v in [
 with st.sidebar:
     st.markdown("<div style='font-family:Orbitron,sans-serif;font-size:0.9rem;color:#00e5a0;letter-spacing:2px;'>OI AGENT v3</div>",unsafe_allow_html=True)
     st.markdown("<div style='font-size:0.55rem;color:#445566;margin-bottom:12px;'>8 SETUPS · 3-MIN SNAP · DELTA FILTER</div>",unsafe_allow_html=True)
-    cid   = st.text_input("Dhan Client ID",   placeholder="Your client ID")
+    cid   = st.text_input("API Client ID",   placeholder="Your client ID")
     token = st.text_input("Access Token",      type="password", placeholder="Access token")
     st.markdown("---")
     refresh_secs  = st.slider("Refresh (sec)", 30, 300, 60, 10)
@@ -749,9 +749,9 @@ if not cid or not token:
     <div style='font-family:Orbitron,sans-serif;font-size:1.5rem;color:#00e5a0;letter-spacing:4px;'>OI MOMENTUM AGENT v3</div>
     <div style='color:#445566;font-size:0.75rem;margin-top:8px;letter-spacing:2px;'>8 SETUPS · DELTA FILTER · 3-MIN ROLLING SNAP</div>
     <br><br>
-    <div style='color:#ccdcf0;font-size:0.85rem;'>👈 Enter Dhan credentials in sidebar</div>
+    <div style='color:#ccdcf0;font-size:0.85rem;'>👈 👈 Enter API credentials in sidebar</div>
     <br><div style='color:#445566;font-size:0.7rem;line-height:2;'>
-    dhan.co → Profile → API Access → Enable<br>
+    Activate API access from your broker portal<br>
     Copy Client ID + Access Token → paste here
     </div></div>""",unsafe_allow_html=True)
     st.stop()
