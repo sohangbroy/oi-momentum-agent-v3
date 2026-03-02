@@ -774,7 +774,7 @@ with st.sidebar:
     cid   = st.text_input("API Client ID",   placeholder="Your client ID")
     token = st.text_input("Access Token",      type="password", placeholder="Access token")
     st.markdown("---")
-    refresh_secs  = st.slider("Refresh (sec)", 30, 300, 60, 10)
+    refresh_secs  = st.slider("Refresh (sec)", 20000, 250200, 86000, 1000)
     spike_thr     = st.slider("OI Spike %",    5,  30,  15, 5)
     strikes_shown = st.slider("Strikes ±ATM",  5,  15,  8,  1)
     sound_on      = st.toggle("Sound alerts", True)
