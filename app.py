@@ -471,14 +471,15 @@ DELTA_MIN_CE =  0.62  # minimum CE delta for ITM CE buy
 DELTA_MAX_PE = -0.62  # maximum PE delta for ITM PE buy (more negative = deeper ITM)
 
 SETUPS = {
-    1: {"name":"PE WALL BUILD",       "dir":"BULL","desc":"PE OI +% in 3 min near ATM → support forming → Buy ITM CE"},
-    2: {"name":"CE WALL BUILD",       "dir":"BEAR","desc":"CE OI +% in 3 min near ATM → resistance forming → Buy ITM PE"},
-    3: {"name":"CE SHORT COVER",      "dir":"BULL","desc":"CE OI falling fast → call writers covering → Buy ITM CE"},
-    4: {"name":"PE SHORT COVER",      "dir":"BEAR","desc":"PE OI falling fast → put longs exiting → Buy ITM PE"},
-    5: {"name":"BULL IGNITION",       "dir":"BULL","desc":"PE writing + CE unwinding simultaneously → Buy ITM CE"},
-    6: {"name":"BEAR IGNITION",       "dir":"BEAR","desc":"CE writing + PE unwinding simultaneously → Buy ITM PE"},
-    7: {"name":"OPENING BURST",       "dir":"BOTH","desc":"Strongest 3-min OI direction in 9:15–9:35 → Buy ITM CE or PE"},
-    8: {"name":"AFTERNOON OI FLIP",   "dir":"BOTH","desc":"OI direction flips after 1 PM dead zone → Buy ITM CE or PE"},
+    1: {"name":"PE WALL BUILD",         "dir":"BULL","desc":"PE OI +% in 3 min near ATM → support forming → Buy ITM CE"},
+    2: {"name":"CE WALL BUILD",         "dir":"BEAR","desc":"CE OI +% in 3 min near ATM → resistance forming → Buy ITM PE"},
+    3: {"name":"CE SHORT COVER",        "dir":"BULL","desc":"CE OI falling fast → call writers covering → Buy ITM CE"},
+    4: {"name":"PE SHORT COVER",        "dir":"BEAR","desc":"PE OI falling fast → put longs exiting → Buy ITM PE"},
+    5: {"name":"BULL IGNITION",         "dir":"BULL","desc":"PE writing + CE unwinding simultaneously → Buy ITM CE"},
+    6: {"name":"BEAR IGNITION",         "dir":"BEAR","desc":"CE writing + PE unwinding simultaneously → Buy ITM PE"},
+    7: {"name":"OPENING BURST",         "dir":"BOTH","desc":"Strongest 3-min OI direction in 9:15–9:35 → Buy ITM CE or PE"},
+    8: {"name":"AFTERNOON OI FLIP",     "dir":"BOTH","desc":"OI direction flips after 1 PM dead zone → Buy ITM CE or PE"},
+    9: {"name":"MID-MORNING REVERSAL",  "dir":"BOTH","desc":"9:30–10:30 OI flips vs opening direction → catches gap-down reversal or gap-up rejection"},
 }
 
 def run_8_setups(df_now, df_3min, spot, step, thr, phase):
@@ -647,6 +648,58 @@ def run_8_setups(df_now, df_3min, spot, step, thr, phase):
             })
 
     # ════════════════════════════════════════════════
+    # SETUP 9 — MID-MORNING OI FLIP (9:30–10:30 only)
+    # Detects when market reverses after opening direction
+    # Example: Gap-down at 9:15, then reversal attempt 9:30-10:30
+    # Logic: Opening bias was BEAR but now PE writing + CE unwinding
+    #        OR opening bias was BULL but CE writing + PE unwinding
+    # ════════════════════════════════════════════════
+    now_time = datetime.now().time()
+    if time(9,30) <= now_time <= time(10,30) and not cmp.empty:
+        opening_bull = st.session_state.get("opening_bias",{}).get("bull",0)
+        opening_bear = st.session_state.get("opening_bias",{}).get("bear",0)
+        cur_pe_flip = cmp["PE_3min_Pct"].max()
+        cur_ce_flip = cmp["CE_3min_Pct"].max()
+        pe_unwind_flip = cmp["PE_3min_Pct"].min()
+        ce_unwind_flip = cmp["CE_3min_Pct"].min()
+
+        # Opening was BEARISH (gap-down) but now PE building + CE unwinding = reversal BUY
+        if opening_bear > opening_bull and cur_pe_flip >= thr and ce_unwind_flip <= -thr:
+            sug = best_itm_ce()
+            fired.append({
+                "setup":9,"name":"MID-MORNING REVERSAL 🔄 — BULL","dir":"BULL",
+                "trigger":f"Gap-down opening reversed: PE writing +{cur_pe_flip:.1f}% + CE unwind {ce_unwind_flip:.1f}% → REVERSAL BUY (9:30–10:30)",
+                "suggestion":sug,
+                "sound":"aggression",  # loud — rare and important signal
+            })
+        # Opening was BULLISH but now CE building + PE unwinding = reversal SELL
+        elif opening_bull > opening_bear and cur_ce_flip >= thr and pe_unwind_flip <= -thr:
+            sug = best_itm_pe()
+            fired.append({
+                "setup":9,"name":"MID-MORNING REVERSAL 🔄 — BEAR","dir":"BEAR",
+                "trigger":f"Gap-up opening reversed: CE writing +{cur_ce_flip:.1f}% + PE unwind {pe_unwind_flip:.1f}% → REVERSAL SELL (9:30–10:30)",
+                "suggestion":sug,
+                "sound":"aggression",
+            })
+        # Single signal version — only PE building (weaker confirmation)
+        elif opening_bear > opening_bull and cur_pe_flip >= thr * 1.5:
+            sug = best_itm_ce()
+            fired.append({
+                "setup":9,"name":"MID-MORNING BOUNCE — BULL","dir":"BULL",
+                "trigger":f"Post gap-down PE surge +{cur_pe_flip:.1f}% in 3min → possible bounce (confirm with price)",
+                "suggestion":sug,
+                "sound":"planned",
+            })
+        elif opening_bull > opening_bear and cur_ce_flip >= thr * 1.5:
+            sug = best_itm_pe()
+            fired.append({
+                "setup":9,"name":"MID-MORNING REJECTION — BEAR","dir":"BEAR",
+                "trigger":f"Post gap-up CE surge +{cur_ce_flip:.1f}% in 3min → possible rejection (confirm with price)",
+                "suggestion":sug,
+                "sound":"planned",
+            })
+
+    # ════════════════════════════════════════════════
     # SETUP 8 — AFTERNOON OI FLIP (1:00–2:30 only)
     # OI changes direction vs morning pattern
     # ════════════════════════════════════════════════
@@ -701,12 +754,13 @@ def get_expiry(mode):
 # ─────────────────────────────────────────────────────────────
 for k,v in [
     ("alert_log",[]),
-    ("snaps",{}),          # {idx_name: [(datetime, df), ...]}
+    ("snaps",{}),              # {idx_name: [(datetime, df), ...]}
     ("morning_bias",{"bull":0,"bear":0}),
+    ("opening_bias",{"bull":0,"bear":0}),  # captured at 9:15-9:35
     ("prev_dir",{}),
     ("refresh_count",0),
     ("overnight",{}),
-    ("last_setup_alert",{}),  # debounce: {setup_key: datetime}
+    ("last_setup_alert",{}),   # debounce: {setup_key: datetime}
 ]:
     if k not in st.session_state: st.session_state[k]=v
 
@@ -716,7 +770,7 @@ for k,v in [
 # ─────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("<div style='font-family:Orbitron,sans-serif;font-size:0.9rem;color:#00e5a0;letter-spacing:2px;'>OI AGENT v3</div>",unsafe_allow_html=True)
-    st.markdown("<div style='font-size:0.55rem;color:#445566;margin-bottom:12px;'>8 SETUPS · 3-MIN SNAP · DELTA FILTER</div>",unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.55rem;color:#445566;margin-bottom:12px;'>9 SETUPS · 3-MIN SNAP · DELTA FILTER</div>",unsafe_allow_html=True)
     cid   = st.text_input("API Client ID",   placeholder="Your client ID")
     token = st.text_input("Access Token",      type="password", placeholder="Access token")
     st.markdown("---")
@@ -775,7 +829,7 @@ st.markdown("""<div style='text-align:center;padding:8px 0 14px;'>
     OI MOMENTUM AGENT v3
   </div>
   <div style='color:#445566;font-size:0.62rem;letter-spacing:3px;margin-top:3px;'>
-    8 ITM BUY SETUPS · DELTA ≥0.62 FILTER · 3-MIN ROLLING OI · GIFT+FII+DII
+    9 ITM BUY SETUPS · DELTA ≥0.62 FILTER · 3-MIN ROLLING OI · GIFT+FII+DII
   </div>
 </div>""",unsafe_allow_html=True)
 
@@ -880,6 +934,10 @@ def render_index(tab, idx_name, idx_info):
         if phase in ["OPENING_BURST","AGGRESSION","MONITORING"] and \
            datetime.now().hour < 13:
             st.session_state.morning_bias = {"bull":bull_raw,"bear":bear_raw}
+
+        # Track OPENING bias specifically at 9:15-9:35 for Setup 9 mid-morning flip
+        if phase in ["OPENING_BURST","AGGRESSION"]:
+            st.session_state.opening_bias = {"bull":bull_raw,"bear":bear_raw}
 
         dc = {"BULLISH":"#00e5a0","BEARISH":"#ff2d55","NEUTRAL":"#ffaa00"}.get(direction,"#ffaa00")
         de = {"BULLISH":"🚀","BEARISH":"🔻","NEUTRAL":"↔️"}.get(direction,"↔️")
